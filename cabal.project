@@ -19,3 +19,4 @@ test-show-details: direct
 
 packages:
   simulation
+  leios-conformance
