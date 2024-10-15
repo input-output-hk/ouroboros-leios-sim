@@ -15,10 +15,18 @@ extra-doc-files:    CHANGELOG.md
 
 common warnings
     ghc-options: -Wall
+    default-extensions:
+       DuplicateRecordFields
+       GADTs
+       ImportQualifiedPost
+       KindSignatures
+       NamedFieldPuns
 
 library
     import:           warnings
     exposed-modules:  Leios.Diffusion
+                      Leios.Environment
+                      Leios.Types
     -- other-modules:
     -- other-extensions:
     build-depends:    async
@@ -53,7 +61,8 @@ test-suite leios-conformance-test
     build-depends:
                   QuickCheck,
                   base ^>=4.19.0.0,
-                  leios-conformance
+                  leios-conformance,
+                  hspec
     build-tool-depends:
        hspec-discover:hspec-discover
     ghc-options: -rtsopts -threaded
