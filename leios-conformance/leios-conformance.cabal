@@ -21,9 +21,11 @@ library
     exposed-modules:  Leios.Diffusion
     -- other-modules:
     -- other-extensions:
-    build-depends:    base ^>=4.19.0.0
+    build-depends:    async
+                    , base ^>=4.19.0.0
                     , bytestring <0.12
                     , containers
+                    , stm
                     , text
     hs-source-dirs:   src
     default-language: Haskell2010
@@ -43,11 +45,15 @@ executable leios-conformance
 test-suite leios-conformance-test
     import:           warnings
     default-language: Haskell2010
-    -- other-modules:
+    other-modules: Leios.DiffusionSpec
     -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
     main-is:          Main.hs
     build-depends:
-        base ^>=4.19.0.0,
-        leios-conformance
+                  QuickCheck,
+                  base ^>=4.19.0.0,
+                  leios-conformance
+    build-tool-depends:
+       hspec-discover:hspec-discover
+    ghc-options: -rtsopts -threaded

@@ -1,14 +1,15 @@
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 -- | Model for network diffusion as defined in the Leios paper (appendix A)
 module Leios.Diffusion where
 
-import Control.Monad (forever)
+import Control.Monad (forM_, forever)
 import Data.ByteString (ByteString)
-import Data.Function (on)
-import Data.List qualified as List
+import Data.Kind (Type)
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text (pack)
@@ -71,26 +72,32 @@ verifyProof (Proof bytes) (HeaderId (s, p)) =
   encodeUtf8 (pack $ show (s, p)) == bytes
 
 data Diffused h = Diffused
-  { headerId :: !HeaderId
-  , diffusionTime :: !Timestamp
-  , peer :: Set.Set Peer
-  , content :: h
+  { diffusionTime :: !Timestamp
+  , peer :: !(Set.Set Peer)
+  , content :: !h
   }
   deriving (Show, Eq, Ord)
 
 data NetworkState = NetworkState
-  { headers :: Set.Set (Diffused Header)
-  , bodies :: Set.Set (Diffused Body)
-  , prefHeader :: Map.Map Peer (Map.Map HeaderId Header)
+  { headers :: !(Set.Set (Diffused Header))
+  , bodies :: !(Set.Set (Diffused (Header, Body)))
+  , prefHeader :: !(Map.Map Peer (Map.Map HeaderId Header))
   }
   deriving (Show)
 
-runNode :: IO ()
-runNode = forever downloadBlocks
+runNode :: Network IO -> IO ()
+runNode network = forever $ diffuseHeaders network
 
-downloadBlocks :: IO ()
-downloadBlocks = do
-  availableBlocks <- getAvailableBlocksFromPeers
-  let toDownload = Set.difference availableBlocks downloadedBlocks
-  let toDownloadList = List.sortBy (comparing `on` diffusionTime) $ Set.toList toDownload
-  mapM_ downloadBlock toDownloadList
+diffuseHeaders :: Network IO -> IO ()
+diffuseHeaders network = do
+  headers <- fetchHeaders network
+  forM_ (filter verifyHeader headers) $ \header -> do
+    diffuseHeader network header
+
+verifyHeader :: Header -> Bool
+verifyHeader = const True
+
+data Network (m :: Type -> Type) = Network
+  { fetchHeaders :: !(m [Header])
+  , diffuseHeader :: !(Header -> m ())
+  }
