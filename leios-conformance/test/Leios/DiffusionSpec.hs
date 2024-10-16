@@ -1,8 +1,9 @@
 module Leios.DiffusionSpec where
 
-import Test.Hspec
+import Leios.Environment (generateValidHeaders)
+import Test.Hspec (Spec)
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck
+import Test.QuickCheck (Property, elements, forAll, (===))
 
 spec :: Spec
 spec =
@@ -10,4 +11,6 @@ spec =
 
 prop_nodeDiffusesAllValidReceivedHeaders :: Property
 prop_nodeDiffusesAllValidReceivedHeaders =
-  forAll
+  forAll (elements [0.0, 0.5, 1.0]) $ \slotRate ->
+    forAll (generateValidHeaders slotRate) $ \headers ->
+      length headers === length headers

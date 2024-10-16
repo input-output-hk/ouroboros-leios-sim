@@ -4,6 +4,8 @@ import Data.ByteString (ByteString)
 import Data.Text (pack)
 import Data.Text.Encoding (encodeUtf8)
 
+type SlotRate = Double
+
 newtype Timestamp = Timestamp Integer
   deriving (Show, Eq, Ord)
 
@@ -56,6 +58,15 @@ verifySignature :: Peer -> Signature -> ByteString -> Bool
 verifySignature (Peer pid) (Signature bytes) body =
   encodeUtf8 (pack $ show (pid, body)) == bytes
 
+mkSignature :: Peer -> ByteString -> Signature
+mkSignature (Peer pid) body = Signature $ toBytes (pid, body)
+
 verifyProof :: Proof -> HeaderId -> Bool
 verifyProof (Proof bytes) (HeaderId (s, p)) =
   encodeUtf8 (pack $ show (s, p)) == bytes
+
+mkProof :: Slot -> Peer -> Proof
+mkProof s p = Proof $ toBytes (s, p)
+
+toBytes :: Show a => a -> ByteString
+toBytes = encodeUtf8 . pack . show

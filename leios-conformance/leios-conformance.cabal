@@ -29,7 +29,8 @@ library
                       Leios.Types
     -- other-modules:
     -- other-extensions:
-    build-depends:    async
+    build-depends:    QuickCheck
+                    , async
                     , base ^>=4.19.0.0
                     , bytestring <0.12
                     , containers

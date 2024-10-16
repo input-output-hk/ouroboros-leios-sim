@@ -1,9 +1,24 @@
 module Leios.Environment where
 
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
 import Data.Kind (Type)
 import Data.Map qualified as Map
+import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
-import Leios.Types (Body, Header, HeaderId, Peer, Timestamp)
+import Leios.Types (
+  Body,
+  Header (..),
+  HeaderId,
+  Peer (..),
+  Slot (..),
+  SlotRate,
+  Timestamp,
+  hash,
+  mkProof,
+  mkSignature,
+ )
+import Test.QuickCheck (Arbitrary (..), Gen, choose, sized, vectorOf)
 
 data Diffused h = Diffused
   { diffusionTime :: !Timestamp
@@ -23,3 +38,24 @@ data Network (m :: Type -> Type) = Network
   { fetchHeaders :: !(m [Header])
   , diffuseHeader :: !(Header -> m ())
   }
+
+generateValidHeaders :: SlotRate -> Gen [Header]
+generateValidHeaders f = sized $ \n ->
+  catMaybes <$> mapM (generateValidHeaderAt f) [1 .. fromIntegral n]
+
+generateValidHeaderAt :: SlotRate -> Integer -> Gen (Maybe Header)
+generateValidHeaderAt f s = do
+  p <- choose (0, 1)
+  if p < f
+    then do
+      let slot = Slot s
+      peer <- Peer <$> arbitrary
+      let lotteryProof = mkProof slot peer
+      body <- genBody
+      let bodyHash = hash body
+      let signature = mkSignature peer body
+      pure $ Just Header{slot, peer, lotteryProof, bodyHash, signature}
+    else pure Nothing
+
+genBody :: Gen ByteString
+genBody = BS.pack <$> vectorOf 16 arbitrary
