@@ -1,5 +1,6 @@
 module Leios.Environment where
 
+import Control.Concurrent.STM (TChan, TVar)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Kind (Type)
@@ -38,6 +39,17 @@ data Network (m :: Type -> Type) = Network
   { fetchHeaders :: !(m [Header])
   , diffuseHeader :: !(Header -> m ())
   }
+
+mkNetwork :: TVar NetworkState -> Network IO
+mkNetwork stateRef =
+  Network
+    { fetchHeaders = atomically $ modifyTVar stateRef $ \state ->
+        let headers = Set.map content (headers state)
+         in (state, headers)
+    , diffuseHeader = \_ -> pure ()
+    }
+
+-- * Generators
 
 generateValidHeaders :: SlotRate -> Gen [Header]
 generateValidHeaders f = sized $ \n ->
