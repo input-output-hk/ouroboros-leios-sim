@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 module Main where
@@ -25,6 +26,7 @@ main = do
     } <- Opts.execParser cli
     let viz = namedViz cliVizName
     case cliOutputFramesDir of
+#ifdef WITH_GUI
       Nothing ->
           vizualise config viz
         where
@@ -33,6 +35,10 @@ main = do
                      gtkVizResolution   = cliVizSize
                    }
 
+#else
+      Nothing -> fail "GUI backend disabled. Use --frames-dir to generate output frames."
+        where _unused = cliCpuRendering
+#endif
       Just outdir ->
         writeAnimationFrames config viz
           where
@@ -50,8 +56,8 @@ cli =
       (Opts.helper <*> options)
       (Opts.fullDesc
     <> Opts.header "Vizualisations of Ouroboros-related network simulations"
-    <> Opts.progDesc "Either show a visualisation in a window, or output \
-                    \ animation frames to a directory.")
+    <> Opts.progDesc ("Either show a visualisation in a window, or output "
+                    ++ "animation frames to a directory."))
 
 
 data CliCmd = 

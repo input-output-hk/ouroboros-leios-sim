@@ -12,10 +12,10 @@ import qualified Data.Map.Strict as Map
 import           Data.Map.Strict (Map)
 import           Data.Foldable
 
-import Control.Applicative
 import Control.Monad
-import Control.Monad.Class.MonadTime
-import Control.Monad.Class.MonadTimer
+import Control.Monad.Class.MonadTime.SI
+import Control.Monad.Class.MonadTimer.SI
+import Control.Concurrent.Class.MonadSTM
 import Control.Monad.Class.MonadAsync
 import Control.Concurrent.Class.MonadSTM
 import Control.Tracer as Tracer
@@ -192,7 +192,7 @@ relayNode tracer
       forever $ do
         (blk, completion) <- atomically $ readTQueue submitq
         threadDelay (blockProcessingDelay blk)
-        _ <- atomically (completion <|> error "relayNode: completions should not block")
+        _ <- atomically (completion `orElse` error "relayNode: completions should not block")
         traceWith tracer (RelayNodeEventEnterBuffer blk)
 
 symmetric :: Ord a => Set (a, a) -> Set (a, a)

@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -18,14 +19,16 @@ import           Data.Functor.Contravariant
 
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Class.MonadTime (Time(Time), DiffTime, diffTime, addTime)
+import           Control.Monad.Class.MonadTime.SI (Time(Time), DiffTime, diffTime, addTime)
 
 import qualified Graphics.Rendering.Cairo as Cairo
 import qualified Graphics.Rendering.Pango.Cairo  as Pango
 import qualified Graphics.Rendering.Pango.Layout as Pango
 import qualified Graphics.Rendering.Pango.Font   as Pango
+#ifdef WITH_GUI
 import qualified Graphics.UI.Gtk as Gtk
 import           Graphics.UI.Gtk (AttrOp((:=)))
+#endif
 
 
 ------------------------------------------------------------------------------
@@ -399,6 +402,7 @@ defaultGtkVizConfig =
       gtkVizCpuRendering = False
     }
 
+#ifdef WITH_GUI
 -- | Animate the vizualisation in a Gtk+ window.
 --
 vizualise :: GtkVizConfig -> Vizualisation -> IO ()
@@ -516,7 +520,7 @@ vizualise GtkVizConfig {
 
     Gtk.widgetShowAll window
     Gtk.mainGUI
-
+#endif
 
 
 data AnimVizConfig =

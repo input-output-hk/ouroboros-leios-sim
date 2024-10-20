@@ -9,8 +9,9 @@ import Data.Bifoldable
 import Data.Dynamic
 
 import Control.Monad
-import Control.Monad.Class.MonadTime
-import Control.Monad.Class.MonadTimer
+import Control.Monad.Class.MonadTime.SI
+import Control.Monad.Class.MonadTimer.SI
+import Control.Concurrent.Class.MonadSTM
 import Control.Monad.Class.MonadAsync
 import Control.Concurrent.Class.MonadSTM
 import Control.Tracer as Tracer

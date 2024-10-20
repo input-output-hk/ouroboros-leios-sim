@@ -33,6 +33,7 @@ import           Data.FingerTree (FingerTree)
 import qualified Data.FingerTree as FingerTree
 
 import Control.Monad
+import Control.Monad.Class.MonadSTM
 import Control.Monad.Class.MonadTime
 import Control.Concurrent.Class.MonadSTM
 import Control.Exception (assert)
