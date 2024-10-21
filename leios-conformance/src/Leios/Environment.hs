@@ -1,6 +1,6 @@
 module Leios.Environment where
 
-import Control.Concurrent.STM (TChan, TVar)
+import Control.Concurrent.STM (TChan, TVar, atomically, modifyTVar, readTVar)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Kind (Type)
@@ -40,14 +40,19 @@ data Network (m :: Type -> Type) = Network
   , diffuseHeader :: !(Header -> m ())
   }
 
-mkNetwork :: TVar NetworkState -> Network IO
-mkNetwork stateRef =
+mkNetwork :: Peer -> TVar NetworkState -> Network IO
+mkNetwork peer stateRef =
   Network
-    { fetchHeaders = atomically $ modifyTVar stateRef $ \state ->
-        let headers = Set.map content (headers state)
-         in (state, headers)
+    { fetchHeaders = atomically $ do
+        headersToDiffuse <- readTVar stateRef >>= \state -> pure $ Set.filter (notReceivedBy peer) (headers state)
+        modifyTVar stateRef $ \state ->
+          map (receive state peer) headersToDiffuse
+        pure (content <$> Set.toList headersToDiffuse)
     , diffuseHeader = \_ -> pure ()
     }
+
+notReceivedBy :: Peer -> Diffused Header -> Bool
+notReceivedBy peer Diffused{peer = peers} = not $ Set.member peer peers
 
 -- * Generators
 
