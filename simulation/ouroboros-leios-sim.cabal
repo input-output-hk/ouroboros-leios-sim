@@ -24,6 +24,7 @@ flag gui
 
 library
   exposed-modules:     Chan,
+                       ChanMux,
                        ModelTCP,
                        ChanTCP,
                        SimTypes,
