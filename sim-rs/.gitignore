@@ -2,3 +2,5 @@
 /output
 flamegraph.svg
 perf.data*
+node_modules
+sim-web/pkg
