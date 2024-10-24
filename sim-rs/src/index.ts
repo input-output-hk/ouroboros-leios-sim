@@ -1,4 +1,4 @@
-import init, { begin_sim } from '../sim-web/pkg'
+import * as check from '../sim-web/pkg/sim_web.js'
 
 const TEST_DATA = `
 seed = 0x3c3373756e646165
@@ -58,7 +58,9 @@ max_ib_size = 327680
 max_ib_requests_per_peer = 1
 `;
 
-console.log("Hello world!");
+console.log("Hello world!", check);
+/*
 await init();
 const result = await begin_sim(TEST_DATA);
 console.log({ result });
+*/

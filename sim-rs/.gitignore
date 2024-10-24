@@ -4,3 +4,4 @@ flamegraph.svg
 perf.data*
 node_modules
 sim-web/pkg
+sim-web/src/bindings.rs
