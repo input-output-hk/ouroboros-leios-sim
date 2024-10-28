@@ -1,88 +1,126 @@
-use std::sync::{Arc, RwLock};
-
-use anyhow::Result;
-use netsim_async::{
-    Edge, EdgePolicy, HasBytesSize, SimContext, SimId, SimSocketReadHalf, SimSocketWriteHalf,
+use std::{
+    collections::{BinaryHeap, HashMap},
+    fmt::Debug,
+    sync::{Arc, RwLock},
+    time::Duration,
 };
 
-use crate::config::NodeId;
+use anyhow::Result;
 
-pub struct Network<T: HasBytesSize> {
-    context: SimContext<T>,
-    id_lookup: IdLookup,
+use crate::{
+    clock::{Clock, Timestamp},
+    config::NodeId,
+};
+
+type MessageQueue<T> = BinaryHeap<PendingMessage<T>>;
+
+struct NetworkCore<T> {
+    pending: MessageQueue<T>,
+    latencies: HashMap<(NodeId, NodeId), Duration>,
+    clock: Clock,
+}
+impl<T> NetworkCore<T> {
+    fn send(&mut self, from: NodeId, to: NodeId, msg: T) {
+        let latency = self.latencies.get(&(from, to)).unwrap();
+        let arriving = self.clock.now() + *latency;
+        let pending = PendingMessage {
+            from,
+            to,
+            msg,
+            arriving,
+        };
+        self.pending.push(pending);
+    }
+    fn connect(&mut self, from: NodeId, to: NodeId, latency: Duration) {
+        self.latencies.insert((from, to), latency);
+        self.latencies.insert((to, from), latency);
+    }
 }
 
-impl<T: HasBytesSize> Network<T> {
-    pub fn new(timescale: u32) -> Self {
-        let mut config = netsim_async::SimConfiguration::default();
-        config.idle_duration /= timescale;
-        Self {
-            context: SimContext::with_config(config),
-            id_lookup: IdLookup::default(),
+pub struct Network<T> {
+    core: Arc<RwLock<NetworkCore<T>>>,
+}
+
+impl<T> Network<T> {
+    pub fn new(clock: Clock) -> Self {
+        let core = Arc::new(RwLock::new(NetworkCore {
+            pending: BinaryHeap::new(),
+            latencies: HashMap::new(),
+            clock,
+        }));
+        Self { core }
+    }
+
+    pub fn open(&mut self, node_id: NodeId) -> Result<NetworkSink<T>> {
+        Ok(NetworkSink {
+            from: node_id,
+            core: self.core.clone(),
+        })
+    }
+
+    pub fn msg_source(&self) -> NetworkSource<T> {
+        NetworkSource {
+            core: self.core.clone(),
         }
     }
 
-    pub fn shutdown(self) -> Result<()> {
-        self.context.shutdown()
-    }
-
-    pub fn open(&mut self, node_id: NodeId) -> Result<(NetworkSource<T>, NetworkSink<T>)> {
-        let socket = self.context.open()?;
-        self.id_lookup.add_id_mapping(node_id, socket.id());
-
-        let (inner_source, inner_sink) = socket.into_split();
-        let source = NetworkSource(inner_source, self.id_lookup.clone());
-        let sink = NetworkSink(inner_sink, self.id_lookup.clone());
-        Ok((source, sink))
-    }
-
-    pub fn set_edge_policy(&mut self, from: NodeId, to: NodeId, policy: EdgePolicy) -> Result<()> {
-        let from = self.id_lookup.find_sim_id(from);
-        let to = self.id_lookup.find_sim_id(to);
-        let edge = Edge::new((from, to));
-        self.context.set_edge_policy(edge, policy)
+    pub fn connect(&mut self, from: NodeId, to: NodeId, latency: Duration) {
+        let mut core = self.core.write().unwrap();
+        core.connect(from, to, latency);
     }
 }
 
-pub struct NetworkSource<T: HasBytesSize>(SimSocketReadHalf<T>, IdLookup);
-impl<T: HasBytesSize> NetworkSource<T> {
-    pub async fn recv(&mut self) -> Option<(NodeId, T)> {
-        let (sim_id, msg) = self.0.recv().await?;
-        let node_id = self.1.find_node_id(sim_id);
-        Some((node_id, msg))
+pub struct NetworkSource<T> {
+    core: Arc<RwLock<NetworkCore<T>>>,
+}
+impl<T> NetworkSource<T> {
+    pub fn peek_next_message_at(&self) -> Option<Timestamp> {
+        let core = self.core.read().unwrap();
+        core.pending.peek().map(|m| m.arriving)
+    }
+    pub fn pop_next_message(&self) -> Option<PendingMessage<T>> {
+        let mut core = self.core.write().unwrap();
+        core.pending.pop()
     }
 }
 
-pub struct NetworkSink<T: HasBytesSize>(SimSocketWriteHalf<T>, IdLookup);
-impl<T: HasBytesSize> NetworkSink<T> {
+pub struct NetworkSink<T> {
+    from: NodeId,
+    core: Arc<RwLock<NetworkCore<T>>>,
+}
+impl<T> NetworkSink<T> {
     pub fn send_to(&self, to: NodeId, msg: T) -> Result<()> {
-        let sim_id = self.1.find_sim_id(to);
-        self.0.send_to(sim_id, msg)
+        let mut lock = self.core.write().unwrap();
+        lock.send(self.from, to, msg);
+        Ok(())
     }
 }
 
-// We must map between NodeId (which this code has control over)
-// and SimId (an opaque type from the netsim library).
-// NodeId is sequentially assigned, so we can look it up by index.
-#[derive(Default, Clone)]
-struct IdLookup(Arc<RwLock<Vec<SimId>>>);
-impl IdLookup {
-    fn add_id_mapping(&self, node_id: NodeId, sim_id: SimId) {
-        let mut id_list = self.0.write().expect("id list rwlock poisoned");
-        assert_eq!(node_id.to_inner(), id_list.len());
-        id_list.push(sim_id);
-    }
+// ordered by timestamp descending, so that BinaryHeap returns the earliest first
+#[derive(Debug)]
+pub struct PendingMessage<T> {
+    pub from: NodeId,
+    pub to: NodeId,
+    pub msg: T,
+    pub arriving: Timestamp,
+}
 
-    fn find_sim_id(&self, node_id: NodeId) -> SimId {
-        let id_list = self.0.read().expect("id list rwlock poisoned!");
-        *id_list
-            .get(node_id.to_inner())
-            .expect("unrecognized node id")
+impl<T> PartialEq for PendingMessage<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.arriving.eq(&other.arriving)
     }
+}
 
-    fn find_node_id(&self, sim_id: SimId) -> NodeId {
-        let id_list = self.0.read().expect("id list rwlock poisoned!");
-        let index = id_list.binary_search(&sim_id).expect("unrecognized sim id");
-        NodeId::new(index)
+impl<T> Eq for PendingMessage<T> {}
+
+impl<T> PartialOrd for PendingMessage<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for PendingMessage<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.arriving.cmp(&self.arriving)
     }
 }

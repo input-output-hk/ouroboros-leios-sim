@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use event_queue::EventQueue;
-use netsim_async::{EdgePolicy, HasBytesSize, Latency};
+use netsim_async::HasBytesSize;
 use priority_queue::PriorityQueue;
 use rand::Rng as _;
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
@@ -27,7 +27,6 @@ pub struct Simulation {
     config: SimConfiguration,
     tracker: EventTracker,
     rng: ChaChaRng,
-    network: Network<SimulationMessage>,
     event_queue: EventQueue,
     nodes: BTreeMap<NodeId, Node>,
     next_tx_id: u64,
@@ -39,14 +38,13 @@ impl Simulation {
     pub fn new(config: SimConfiguration, tracker: EventTracker, clock: Clock) -> Result<Self> {
         let total_stake = config.nodes.iter().map(|p| p.stake).sum();
 
-        let mut network = Network::new(config.timescale);
+        let mut network = Network::new(clock.clone());
 
         let rng = ChaChaRng::seed_from_u64(config.seed);
         let mut nodes = BTreeMap::new();
-        let mut msg_sources = vec![];
         for node_config in &config.nodes {
             let id = node_config.id;
-            let (msg_source, msg_sink) = network.open(id).context("could not open socket")?;
+            let msg_sink = network.open(id).context("could not open socket")?;
             let node = Node::new(
                 node_config,
                 &config,
@@ -55,28 +53,23 @@ impl Simulation {
                 tracker.clone(),
                 clock.clone(),
             );
-            msg_sources.push((node.id, msg_source));
             nodes.insert(node.id, node);
         }
         for link_config in config.links.iter() {
-            network.set_edge_policy(
+            network.connect(
                 link_config.nodes.0,
                 link_config.nodes.1,
-                EdgePolicy {
-                    latency: Latency::new(link_config.latency),
-                    ..EdgePolicy::default()
-                },
-            )?;
+                link_config.latency,
+            );
         }
 
-        let mut event_queue = EventQueue::new(clock, msg_sources);
+        let mut event_queue = EventQueue::new(clock, network.msg_source());
         event_queue.queue_event(SimulationEvent::NewSlot(0), Duration::ZERO);
         event_queue.queue_event(SimulationEvent::NewTransaction, Duration::ZERO);
         Ok(Self {
             config,
             tracker,
             rng,
-            network,
             event_queue,
             nodes,
             next_tx_id: 0,
@@ -162,7 +155,7 @@ impl Simulation {
     }
 
     pub fn shutdown(self) -> Result<()> {
-        self.network.shutdown()
+        Ok(())
     }
 
     fn handle_new_slot(&mut self, slot: u64) -> Result<bool> {

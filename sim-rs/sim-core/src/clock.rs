@@ -1,5 +1,6 @@
 use std::{
     ops::{Add, Sub},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -36,19 +37,29 @@ impl Serialize for Timestamp {
 pub struct Clock {
     start: Instant,
     scale: u32,
+    now: Arc<RwLock<Duration>>,
 }
 
 impl Clock {
     pub fn new(start: Instant, scale: u32) -> Self {
-        Self { start, scale }
+        Self {
+            start,
+            scale,
+            now: Arc::new(RwLock::new(Duration::ZERO)),
+        }
     }
 
     pub fn now(&self) -> Timestamp {
-        Timestamp(self.start.elapsed() * self.scale)
+        let now = self.now.read().unwrap();
+        Timestamp(*now)
     }
 
     pub fn wait_until(&self, timestamp: Timestamp) -> Sleep {
         let instant = self.start + (timestamp.0 / self.scale);
         time::sleep_until(instant.into())
+    }
+
+    pub fn advance(&self, now: Timestamp) {
+        *self.now.write().unwrap() = now.0;
     }
 }

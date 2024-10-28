@@ -1,13 +1,8 @@
-use std::{cmp::Reverse, collections::BinaryHeap, pin::Pin, time::Duration};
-
-use async_stream::stream;
-use futures::{stream::select_all, Stream, StreamExt};
-use tokio::select;
+use std::{cmp::Reverse, collections::BinaryHeap, time::Duration};
 
 use crate::{
     clock::{Clock, Timestamp},
-    config::NodeId,
-    network::NetworkSource,
+    network::{NetworkSource, PendingMessage},
 };
 
 use super::{SimulationEvent, SimulationMessage};
@@ -15,15 +10,15 @@ use super::{SimulationEvent, SimulationMessage};
 pub struct EventQueue {
     clock: Clock,
     scheduled: BinaryHeap<FutureEvent>,
-    msg_source: Pin<Box<dyn Stream<Item = SimulationEvent>>>,
+    msg_source: NetworkSource<SimulationMessage>,
 }
 
 impl EventQueue {
-    pub fn new(clock: Clock, msg_sources: Vec<(NodeId, NetworkSource<SimulationMessage>)>) -> Self {
+    pub fn new(clock: Clock, msg_source: NetworkSource<SimulationMessage>) -> Self {
         Self {
             clock,
             scheduled: BinaryHeap::new(),
-            msg_source: Box::pin(stream_incoming_messages(msg_sources)),
+            msg_source,
         }
     }
 
@@ -33,44 +28,37 @@ impl EventQueue {
     }
 
     pub async fn next_event(&mut self) -> Option<SimulationEvent> {
-        let scheduled_event = self.scheduled.peek().cloned();
-        let clock = self.clock.clone();
+        let scheduled_at = self.scheduled.peek().map(|e| e.0);
+        let receiving_at = self.msg_source.peek_next_message_at();
 
-        let next_scheduled_event = async move {
-            let FutureEvent(timestamp, event) = scheduled_event?;
-            clock.wait_until(timestamp).await;
-            Some(event)
-        };
-        let next_network_event = &mut self.msg_source.next();
-
-        select! {
-            biased; // always poll the "next scheduled event" future first
-            Some(event) = next_scheduled_event => {
-                self.scheduled.pop();
-                Some(event)
-            }
-            Some(event) = next_network_event => Some(event),
-            else => None
+        if scheduled_at.is_none() && receiving_at.is_none() {
+            return None;
         }
-    }
-}
 
-fn stream_incoming_messages(
-    msg_sources: Vec<(NodeId, NetworkSource<SimulationMessage>)>,
-) -> impl Stream<Item = SimulationEvent> {
-    select_all(msg_sources.into_iter().map(|(to, mut source)| {
-        let stream = stream! {
-            while let Some((from, msg)) = source.recv().await {
-                yield SimulationEvent::NetworkMessage { from, to, msg }
-            }
+        let next_event_is_scheduled =
+            scheduled_at.is_some_and(|s| !receiving_at.is_some_and(|r| r < s));
+        let (event, timestamp) = if next_event_is_scheduled {
+            let FutureEvent(timestamp, event) = self.scheduled.pop().unwrap();
+            (event, timestamp)
+        } else {
+            let PendingMessage {
+                from,
+                to,
+                msg,
+                arriving,
+            } = self.msg_source.pop_next_message().unwrap();
+            let event = SimulationEvent::NetworkMessage { from, to, msg };
+            (event, arriving)
         };
-        Box::pin(stream)
-    }))
+
+        self.clock.advance(timestamp);
+        Some(event)
+    }
 }
 
 // wrapper struct which holds a SimulationEvent,
 // but is ordered by a timestamp (in reverse)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct FutureEvent(Timestamp, SimulationEvent);
 impl FutureEvent {
     fn key(&self) -> Reverse<Timestamp> {
