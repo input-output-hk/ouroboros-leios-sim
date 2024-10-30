@@ -1,6 +1,6 @@
 use crate::{
     delta_q::{DeltaQ, LoadUpdate, Name},
-    PersistentContext, Outcome,
+    Outcome, PersistentContext,
 };
 use std::{rc::Rc, sync::Arc};
 use web_sys::HtmlInputElement;
@@ -53,6 +53,9 @@ pub fn delta_q_component(props: &Props) -> Html {
         }
         DeltaQ::ForSome(first, second) => {
             html!(<Branch top={(**first).clone()} bottom={(**second).clone()} kind={BranchKind::ForSome} {on_change} />)
+        }
+        DeltaQ::Gossip { .. } => {
+            html! { <div>{ "gossip" }</div> }
         }
     }
 }

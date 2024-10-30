@@ -1,7 +1,7 @@
 use crate::{parser::eval_ctx, CDFError, CompactionMode, Outcome, CDF, DEFAULT_MAX_SIZE};
 use smallstr::SmallString;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fmt::{self, Display},
     str::FromStr,
     sync::Arc,
@@ -168,14 +168,6 @@ impl Default for LoadUpdate {
 
 /// A DeltaQ is a representation of a probability distribution that can be
 /// manipulated in various ways.
-///
-/// The Display implementation prints out the expression using the syntax from the paper:
-/// - Names are printed as-is.
-/// - CDFs are printed as-is.
-/// - Sequences are printed as `A ->- B`.
-/// - Choices are printed as `A a<>b B`.
-/// - Universal quantifications are printed as `all(A|B)`.
-/// - Existential quantifications are printed as `some(A|B)`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum DeltaQ {
     /// Un unelaborated and unknown DeltaQ.
@@ -209,6 +201,12 @@ pub enum DeltaQ {
         #[serde(with = "delta_q_serde")] Arc<DeltaQ>,
         #[serde(with = "delta_q_serde")] Arc<DeltaQ>,
     ),
+    Gossip {
+        #[serde(with = "delta_q_serde")]
+        hop: Arc<DeltaQ>,
+        size: f32,
+        branching: f32,
+    },
 }
 
 mod delta_q_serde {
@@ -247,6 +245,10 @@ impl FromStr for DeltaQ {
 }
 
 impl DeltaQ {
+    pub fn top() -> DeltaQ {
+        DeltaQ::Outcome(Outcome::new(CDF::from_steps(&[(0.0, 1.0)]).unwrap()))
+    }
+
     /// Create a new DeltaQ from a name, referencing a variable.
     pub fn name(name: &str) -> DeltaQ {
         DeltaQ::Name(name.into(), None)
@@ -284,38 +286,6 @@ impl DeltaQ {
     /// Create a new DeltaQ from an existential quantification over two DeltaQs.
     pub fn for_some(first: DeltaQ, second: DeltaQ) -> DeltaQ {
         DeltaQ::ForSome(Arc::new(first), Arc::new(second))
-    }
-
-    pub fn deps(&self) -> BTreeSet<Name> {
-        match self {
-            DeltaQ::BlackBox => BTreeSet::new(),
-            DeltaQ::Name(name, _rec) => {
-                let mut deps = BTreeSet::new();
-                deps.insert(name.clone());
-                deps
-            }
-            DeltaQ::Outcome { .. } => BTreeSet::new(),
-            DeltaQ::Seq(first, _load, second) => {
-                let mut deps = first.deps();
-                deps.extend(second.deps());
-                deps
-            }
-            DeltaQ::Choice(first, _, second, _) => {
-                let mut deps = first.deps();
-                deps.extend(second.deps());
-                deps
-            }
-            DeltaQ::ForAll(first, second) => {
-                let mut deps = first.deps();
-                deps.extend(second.deps());
-                deps
-            }
-            DeltaQ::ForSome(first, second) => {
-                let mut deps = first.deps();
-                deps.extend(second.deps());
-                deps
-            }
-        }
     }
 
     fn display(&self, f: &mut fmt::Formatter<'_>, parens: bool) -> fmt::Result {
@@ -365,6 +335,39 @@ impl DeltaQ {
             }
             DeltaQ::ForSome(first, second) => {
                 write!(f, "∃({} | {})", first, second)
+            }
+            DeltaQ::Gossip {
+                hop,
+                size,
+                branching,
+            } => {
+                write!(f, "gossip({}, {}, {})", hop, size, branching)
+            }
+        }
+    }
+
+    pub fn expand(&self) -> DeltaQ {
+        // recursively expand gossip, depth first
+        match self {
+            DeltaQ::BlackBox | DeltaQ::Name(..) | DeltaQ::Outcome(_) => self.clone(),
+            DeltaQ::Seq(first, load, second) => {
+                DeltaQ::Seq(Arc::new(first.expand()), *load, Arc::new(second.expand()))
+            }
+            DeltaQ::Choice(first, first_weight, second, second_weight) => DeltaQ::choice(
+                first.expand(),
+                *first_weight,
+                second.expand(),
+                *second_weight,
+            ),
+            DeltaQ::ForAll(first, second) => DeltaQ::for_all(first.expand(), second.expand()),
+            DeltaQ::ForSome(first, second) => DeltaQ::for_some(first.expand(), second.expand()),
+            DeltaQ::Gossip {
+                hop,
+                size,
+                branching,
+            } => {
+                let hop = hop.expand();
+                expand_gossip(hop, *size, *branching)
             }
         }
     }
@@ -484,8 +487,50 @@ impl DeltaQ {
                     .for_some(&second_cdf, ctx)
                     .map_err(DeltaQError::CDFError)
             }
+            DeltaQ::Gossip { .. } => panic!("gossip encountered in eval"),
         }
     }
+}
+
+// assume that gossiping to a node that already has been reached is free
+fn expand_gossip(hop: DeltaQ, size: f32, branching: f32) -> DeltaQ {
+    if size <= 1.0 {
+        return DeltaQ::top();
+    }
+
+    let mut remaining = size - 1.0;
+    let mut steps = vec![];
+
+    while remaining > 0.0 {
+        let prev = remaining;
+        for _ in 0..(size - remaining).round() as usize {
+            remaining -= branching * (remaining / (size - 1.0)).powf(branching);
+            if remaining < 0.0 {
+                remaining = 0.0;
+                break;
+            }
+        }
+        steps.push((prev - remaining, remaining));
+    }
+
+    let mut ret = DeltaQ::BlackBox;
+    for (step, remaining) in steps.into_iter().rev() {
+        if remaining > 0.0 {
+            ret = DeltaQ::Seq(
+                Arc::new(hop.clone()),
+                LoadUpdate::new(branching, 0.0),
+                Arc::new(DeltaQ::choice(DeltaQ::top(), step, ret, remaining)),
+            );
+        } else {
+            ret = hop.clone();
+        }
+    }
+
+    DeltaQ::Seq(
+        Arc::new(DeltaQ::top()),
+        LoadUpdate::new(branching, 0.0),
+        Arc::new(DeltaQ::choice(DeltaQ::top(), 1.0, ret, size - 1.0)),
+    )
 }
 
 // Define the new EphemeralContext struct
