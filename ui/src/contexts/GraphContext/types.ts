@@ -3,6 +3,7 @@ import {
   ITransactionMessage,
   ITransformedNodeMap
 } from "@/components/Graph/types";
+import type { Application, Container, Renderer } from "pixi.js";
 import { Dispatch, MutableRefObject, RefObject } from "react";
 
 export enum ESpeedOptions {
@@ -12,7 +13,12 @@ export enum ESpeedOptions {
 }
 
 export interface IGraphContextState {
-  canvasRef: RefObject<HTMLCanvasElement>;
+  canvasRef: RefObject<HTMLDivElement>;
+  pixiAppInitialized: boolean;
+  pixiAppRef: RefObject<Application<Renderer>>;
+  nodesContainerRef: RefObject<Container>;
+  linksContainerRef: RefObject<Container>;
+  transactionsContainerRef: RefObject<Container>;
   currentTime: number;
   generatedMessages: Set<number>;
   intervalId: MutableRefObject<Timer | null>;
@@ -30,6 +36,7 @@ export interface IGraphContextState {
 
 export type TGraphContextActions =
   | { type: "SET_CURRENT_TIME"; payload: number }
+  | { type: "SET_APP_INITIALIZED"; payload: boolean }
   | { type: "ADD_GENERATED_MESSAGE"; payload: number }
   | { type: "SET_GENERATED_MESSSAGES", payload: Set<number> }
   | { type: "REMOVE_GENERATED_MESSAGE"; payload: number }

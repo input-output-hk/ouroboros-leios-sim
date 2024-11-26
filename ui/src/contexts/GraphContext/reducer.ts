@@ -6,6 +6,9 @@ export const reducer = (
   action: TGraphContextActions,
 ): IGraphContextState => {
   switch (action.type) {
+    case "SET_APP_INITIALIZED":
+      return { ...state, pixiAppInitialized: action.payload };
+      
     case "SET_CURRENT_TIME":
       return { ...state, currentTime: action.payload };
 

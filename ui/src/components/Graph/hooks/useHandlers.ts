@@ -1,3 +1,6 @@
+"use client";
+import * as PIXI from "pixi.js";
+
 import { useGraphContext } from "@/contexts/GraphContext/context";
 import { ESpeedOptions } from "@/contexts/GraphContext/types";
 import { useCallback } from "react";
@@ -12,6 +15,11 @@ export const useHandlers = () => {
   const {
     state: {
       canvasRef,
+      pixiAppInitialized,
+      pixiAppRef,
+      linksContainerRef,
+      nodesContainerRef,
+      transactionsContainerRef,
       currentTime,
       intervalId,
       maxTime,
@@ -21,15 +29,20 @@ export const useHandlers = () => {
       simulationStartTime,
       topography,
     },
-    dispatch
+    dispatch,
   } = useGraphContext();
 
-  const { startStream, stopStream, transactionsRef, txReceivedMessagesRef, txGeneratedRef, txSentMessagesRef } = useStreamMessagesHandler();
+  const {
+    startStream,
+    stopStream,
+    transactionsRef,
+    txReceivedMessagesRef,
+    txGeneratedRef,
+    txSentMessagesRef,
+  } = useStreamMessagesHandler();
 
   const drawCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!context || !canvas) {
+    if (!pixiAppInitialized) {
       return;
     }
 
@@ -53,15 +66,34 @@ export const useHandlers = () => {
       return;
     }
 
+    const canvas = canvasRef.current as HTMLDivElement;
+    const app = pixiAppRef.current as PIXI.Application;
+
     // Set canvas dimensions
-    const width = canvas.parentElement?.getBoundingClientRect().width || 1024;
-    const height = canvas.parentElement?.getBoundingClientRect().height || 800;
-    canvas.width = width;
-    canvas.height = height;
+    const width = app.canvas?.getBoundingClientRect().width || 1024;
+    const height = app.canvas?.getBoundingClientRect().height || 800;
+    // canvas.width = width;
+    // canvas.height = height;
 
     // Clear the canvas
-    context.clearRect(0, 0, width, height);
-    context.save();
+    app.renderer.resize(width, height);
+
+    // Clear the containers
+    const linksContainer = linksContainerRef.current;
+    const nodesContainer = nodesContainerRef.current;
+    const transactionsContainer = transactionsContainerRef.current;
+
+    if (
+      linksContainer === null ||
+      nodesContainer === null ||
+      transactionsContainer === null
+    ) {
+      return;
+    }
+
+    linksContainer.removeChildren();
+    nodesContainer.removeChildren();
+    transactionsContainer.removeChildren();
 
     // Calculate the bounds
     const coordinates: { xValues: number[]; yValues: number[] } = {
@@ -89,10 +121,11 @@ export const useHandlers = () => {
     offsetY = canvasCenterY - (minY + pathHeight / 2) * scale;
 
     // Apply translation and scaling
-    context.translate(offsetX, offsetY);
-    context.scale(scale, scale);
+    app.stage.position.set(offsetX, offsetY);
+    app.stage.scale.set(scale, scale);
 
     // Draw the links
+    const linksGraphics = new PIXI.Graphics();
     topography.links.forEach((link) => {
       const nodeStart = topography.nodes.get(link.source);
       const nodeEnd = topography.nodes.get(link.target);
@@ -100,23 +133,54 @@ export const useHandlers = () => {
         return;
       }
 
-      context.beginPath();
-      context.moveTo(nodeStart.fx, nodeStart.fy);
-      context.lineTo(nodeEnd.fx, nodeEnd.fy);
-      context.strokeStyle = "#ddd";
-      context.lineWidth = 0.2;
-      context.stroke();
+      linksGraphics.lineStyle(2, 0xdddddd); // Correct method
+      linksGraphics.moveTo(nodeStart.fx, nodeStart.fy);
+      linksGraphics.lineTo(nodeEnd.fx, nodeEnd.fy);
     });
 
+    linksContainer.addChild(linksGraphics);
+
+    // Draw the nodes
+    const nodesGraphics = new PIXI.Graphics();
+    topography.nodes.forEach((node) => {
+      const fillColor = node.data.stake ? 0x00ff00 : 0x0000ff; // Green or blue
+      let nodeFillColor = fillColor;
+
+      txGeneratedRef.current.forEach((m) => {
+        const target = m.time / 1_000_000;
+        if (
+          m.message.publisher === node.id &&
+          isWithinRange(elapsed, target, 50)
+        ) {
+          nodeFillColor = 0xff0000; // Red
+        }
+
+        if (m.message.publisher === node.id && elapsed > target) {
+          dispatch({
+            type: "ADD_GENERATED_MESSAGE",
+            payload: m.time / 1_000_000,
+          });
+        }
+      });
+
+      nodesGraphics.lineStyle(1 / scale, 0x000000);
+      nodesGraphics.beginFill(nodeFillColor);
+      nodesGraphics.drawCircle(node.fx, node.fy, 1);
+      nodesGraphics.endFill();
+    });
+
+    nodesContainer.addChild(nodesGraphics);
+
     // Draw the transactions
+    const transactionsGraphics = new PIXI.Graphics();
     transactionsRef.current.forEach((txList, id) => {
-      const lastMessage = txList[txList.length -1];
+      const lastMessage = txList[txList.length - 1];
       if (elapsed > lastMessage.sentTime + lastMessage.duration) {
         transactionsRef.current.delete(id);
-        txList.forEach(tx => {
+        txList.forEach((tx) => {
           txSentMessagesRef.current.delete(tx.sentTime);
           txReceivedMessagesRef.current.delete(tx.sentTime + tx.duration);
-        })
+        });
       }
 
       txList.forEach((transaction) => {
@@ -144,7 +208,7 @@ export const useHandlers = () => {
 
         // If we're past the animation, log it to our sent transaction store.
         else if (elapsed > sentTime + duration) {
-          dispatch({ type: "ADD_SENT_TX", payload: sentTime })
+          dispatch({ type: "ADD_SENT_TX", payload: sentTime });
         }
 
         // Draw the transaction event.
@@ -153,42 +217,18 @@ export const useHandlers = () => {
           const t = Math.min(transactionElapsedTime / duration, 1);
           const x = startX + t * (endX - startX);
           const y = startY + t * (endY - startY);
-  
+
           // Draw the moving circle
-          context.beginPath();
-          context.arc(x, y, 0.5, 0, 2 * Math.PI);
-          context.fillStyle = "red";
-          context.fill();
+          transactionsGraphics.beginFill(0xff0000); // Red color
+          transactionsGraphics.drawCircle(x, y, 0.5);
+          transactionsGraphics.endFill();
         }
       });
     });
 
-    // Draw the nodes
-    topography.nodes.forEach((node) => {
-      context.beginPath();
-      context.arc(node.fx, node.fy, 1, 0, 2 * Math.PI);
-      context.fillStyle = node.data.stake ? "green" : "blue";
-      context.stroke();
-      context.strokeStyle = "black";
+    transactionsContainer.addChild(transactionsGraphics);
 
-      txGeneratedRef.current.forEach((m) => {
-        const target = m.time / 1_000_000;
-        if (
-          m.message.publisher === node.id &&
-          isWithinRange(elapsed, target, 50)
-        ) {
-          context.fillStyle = "red";
-        }
-
-        if (m.message.publisher === node.id && elapsed > target) {
-          dispatch({ type: "ADD_GENERATED_MESSAGE", payload: m.time / 1_000_000 })
-        }
-      });
-
-      context.fill();
-    });
-
-    context.restore();
+    app.render();
   }, [playing, speed, maxTime]);
 
   // Function to toggle play/pause
@@ -208,18 +248,21 @@ export const useHandlers = () => {
       }
     }
 
-    dispatch({ type: "TOGGLE_PLAYING" })
+    dispatch({ type: "TOGGLE_PLAYING" });
   }, [drawCanvas, currentTime, speed]);
 
   const handleResetSim = useCallback(() => {
-    dispatch({ type: "BATCH_UPDATE", payload: {
-      currentTime: 0,
-      playing: false,
-      sentTxs: new Set(),
-      speed: ESpeedOptions["1/300"],
-      generatedMessages: new Set()
-    } });
-    
+    dispatch({
+      type: "BATCH_UPDATE",
+      payload: {
+        currentTime: 0,
+        playing: false,
+        sentTxs: new Set(),
+        speed: ESpeedOptions["1/300"],
+        generatedMessages: new Set(),
+      },
+    });
+
     simulationStartTime.current = 0;
     simulationPauseTime.current = 0;
     transactionsRef.current = new Map();

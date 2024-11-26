@@ -4,6 +4,11 @@ import { ESpeedOptions, IGraphContext, IGraphContextState } from "./types";
 
 export const defaultState: IGraphContextState = {
   canvasRef: { current: null },
+  linksContainerRef: { current: null },
+  nodesContainerRef: { current: null },
+  pixiAppRef: { current: null },
+  pixiAppInitialized: false,
+  transactionsContainerRef: { current: null },
   currentTime: 0,
   generatedMessages: new Set(),
   intervalId: { current: null },
