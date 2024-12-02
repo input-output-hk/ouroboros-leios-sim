@@ -15,7 +15,8 @@ export enum ESpeedOptions {
 }
 
 export interface IGraphContextState {
-  canvasRef: RefObject<HTMLCanvasElement>;
+  topographyCanvasRef: RefObject<HTMLCanvasElement>;
+  transactionCanvasRef: RefObject<HTMLCanvasElement>;
   transactionsByIdRef: MutableRefObject<Map<number, ITransactionMessage[]>>;
   txGeneratedMessagesById: MutableRefObject<Map<number, IServerMessage<ITransactionGenerated>>>;
   txSentMessagesById: MutableRefObject<Map<number, IServerMessage<ITransactionSent>[]>>;

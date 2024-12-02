@@ -3,7 +3,6 @@
 import { GraphContextProvider } from "@/contexts/GraphContext/GraphContextProvider";
 import { FC } from "react";
 import { Canvas } from "./modules/Canvas";
-import { ChartTransactionsSent } from "./modules/Chart.TransactionsSent";
 import { Controls } from "./modules/Controls";
 import { Slider } from "./modules/Slider";
 import { IServerNodeMap } from "./types";
@@ -28,7 +27,7 @@ export const GraphWrapper: FC<IGraphWrapperProps> = ({
         <Canvas />
         <div className="flex flex-col w-1/3 items-center justify-between gap-4">
           <div className="w-full h-[400px]">
-            <ChartTransactionsSent />
+            {/* <ChartTransactionsSent /> */}
           </div>
         </div>
       </div>

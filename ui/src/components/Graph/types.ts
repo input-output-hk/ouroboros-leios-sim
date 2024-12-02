@@ -131,12 +131,3 @@ export interface ITransactionMessage {
   source: number;
   target: number;
 }
-
-export interface ITransactionRoundTrip {
-  generated: number;
-  trip: {
-    source: number;
-    target: number;
-    duration: number;
-  }[];
-}

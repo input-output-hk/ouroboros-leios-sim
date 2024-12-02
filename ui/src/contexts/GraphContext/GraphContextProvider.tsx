@@ -3,10 +3,9 @@ import {
   FC,
   PropsWithChildren,
   useCallback,
-  useEffect,
   useMemo,
   useReducer,
-  useRef,
+  useRef
 } from "react";
 
 import { IGraphWrapperProps } from "@/components/Graph/GraphWapper";
@@ -20,11 +19,12 @@ import {
 } from "@/components/Graph/types";
 import { defaultState, GraphContext } from "./context";
 import { reducer } from "./reducer";
+import { IGraphContextState } from "./types";
 
 export const GraphContextProvider: FC<
   PropsWithChildren<IGraphWrapperProps>
 > = ({ children, topography, maxTime }) => {
-  const defaultSyncedState = useMemo(() => {
+  const defaultSyncedState: IGraphContextState = useMemo(() => {
     const transformedTopography: ITransformedNodeMap = {
       nodes: new Map(
         topography.nodes.map((n, i) => [
@@ -58,7 +58,8 @@ export const GraphContextProvider: FC<
 
   const [state, dispatch] = useReducer(reducer, defaultSyncedState);
 
-  const canvasRef = useRef<HTMLCanvasElement>(defaultState.canvasRef.current);
+  const topographyCanvasRef = useRef<HTMLCanvasElement>(defaultState.topographyCanvasRef.current);
+  const transactionCanvasRef = useRef<HTMLCanvasElement>(defaultState.transactionCanvasRef.current);
   const intervalId = useRef<number | null>(defaultState.intervalId.current);
   const simulationPauseTime = useRef<number>(
     defaultState.simulationPauseTime.current,
@@ -81,10 +82,11 @@ export const GraphContextProvider: FC<
     Map<number, IServerMessage<ITransactionReceived>[]>
   >(new Map());
 
-  const resolvedState = useMemo(
+  const resolvedState: IGraphContextState = useMemo(
     () => ({
       ...state,
-      canvasRef,
+      topographyCanvasRef,
+      transactionCanvasRef,
       transactionsByIdRef,
       txGeneratedMessagesById,
       txSentMessagesById,
@@ -134,18 +136,18 @@ export const GraphContextProvider: FC<
     });
   }, [state.speed, defaultSyncedState.topography.nodes]);
 
-  useEffect(() => {
-    let interval: Timer | undefined = undefined;
-    if (state.playing) {
-      interval = setInterval(aggregateSimluationData, 10000 * state.speed);
-    } else if (interval !== undefined) {
-      clearInterval(interval);
-    }
+  // useEffect(() => {
+  //   let interval: Timer | undefined = undefined;
+  //   if (state.playing) {
+  //     interval = setInterval(aggregateSimluationData, 10000 * state.speed);
+  //   } else if (interval !== undefined) {
+  //     clearInterval(interval);
+  //   }
 
-    return () => {
-      clearInterval(interval);
-    };
-  }, [state.playing, state.speed]);
+  //   return () => {
+  //     clearInterval(interval);
+  //   };
+  // }, [state.playing, state.speed]);
 
   return (
     <GraphContext.Provider value={{ state: resolvedState, dispatch }}>

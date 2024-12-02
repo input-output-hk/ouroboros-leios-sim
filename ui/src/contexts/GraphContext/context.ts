@@ -3,7 +3,8 @@ import { Context, createContext, useContext } from "react";
 import { ESpeedOptions, IGraphContext, IGraphContextState } from "./types";
 
 export const defaultState: IGraphContextState = {
-  canvasRef: { current: null },
+  topographyCanvasRef: { current: null },
+  transactionCanvasRef: { current: null },
   transactionsByIdRef: { current: new Map() },
   txGeneratedMessagesById: { current: new Map() },
   txReceivedMessagesById: { current: new Map() },
