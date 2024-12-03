@@ -16,7 +16,7 @@ export const useHandlers = () => {
       intervalId,
       maxTime,
       playing,
-      transactionsByIdRef,
+      eventsByIdRef: transactionsByIdRef,
       txGeneratedMessagesById,
       txReceivedMessagesById,
       txSentMessagesById,

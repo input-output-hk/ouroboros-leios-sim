@@ -1,7 +1,10 @@
 import {
+  IEventData,
+  IInputBlockGenerated,
+  IInputBlockReceived,
+  IInputBlockSent,
   IServerMessage,
   ITransactionGenerated,
-  ITransactionMessage,
   ITransactionReceived,
   ITransactionSent,
   ITransformedNodeMap
@@ -16,10 +19,13 @@ export enum ESpeedOptions {
 
 export interface IGraphContextState {
   canvasRef: RefObject<HTMLCanvasElement>;
-  transactionsByIdRef: MutableRefObject<Map<number, ITransactionMessage[]>>;
+  eventsByIdRef: MutableRefObject<Map<number, IEventData[]>>;
   txGeneratedMessagesById: MutableRefObject<Map<number, IServerMessage<ITransactionGenerated>>>;
   txSentMessagesById: MutableRefObject<Map<number, IServerMessage<ITransactionSent>[]>>;
   txReceivedMessagesById: MutableRefObject<Map<number, IServerMessage<ITransactionReceived>[]>>;
+  ibGeneratedMessagesById: MutableRefObject<Map<string, IServerMessage<IInputBlockGenerated>>>;
+  ibSentMessagesById: MutableRefObject<Map<number, IServerMessage<IInputBlockSent>[]>>;
+  ibReceivedMessagesById: MutableRefObject<Map<number, IServerMessage<IInputBlockReceived>[]>>;
   currentTime: number;
   generatedMessages: number[];
   intervalId: MutableRefObject<number | null>;
@@ -32,7 +38,7 @@ export interface IGraphContextState {
   speed: ESpeedOptions;
   topography: ITransformedNodeMap;
   topographyLoaded: boolean;
-  transactions: Map<number, ITransactionMessage[]>;
+  transactions: Map<number, IEventData[]>;
 }
 
 export type TGraphContextActions =

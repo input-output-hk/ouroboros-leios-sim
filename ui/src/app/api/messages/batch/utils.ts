@@ -1,8 +1,8 @@
 import {
   EMessageType,
+  IEventData,
   IServerMessage,
   ITransactionGenerated,
-  ITransactionMessage,
   ITransactionReceived,
   ITransactionSent,
 } from "@/components/Graph/types";
@@ -39,7 +39,7 @@ export const processMessage = (json: IServerMessage, {
         receivedMsg.message.sender === message.sender &&
         receivedMsg.message.recipient === message.recipient
       ) {
-        const transaction: ITransactionMessage = {
+        const transaction: IEventData = {
           id: message.id,
           duration:
             Math.floor(receivedMsg.time / 1_000_000) -
@@ -70,7 +70,7 @@ export const processMessage = (json: IServerMessage, {
         sentMsg.message.sender === message.sender &&
         sentMsg.message.recipient === message.recipient
       ) {
-        const transaction: ITransactionMessage = {
+        const transaction: IEventData = {
           id: message.id,
           duration:
             Math.floor(json.time / 1_000_000) -

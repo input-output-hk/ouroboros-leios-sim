@@ -11,15 +11,19 @@ import {
 
 import { IGraphWrapperProps } from "@/components/Graph/GraphWapper";
 import {
+  IEventData,
+  IInputBlockGenerated,
+  IInputBlockReceived,
+  IInputBlockSent,
   IServerMessage,
   ITransactionGenerated,
-  ITransactionMessage,
   ITransactionReceived,
   ITransactionSent,
   ITransformedNodeMap,
 } from "@/components/Graph/types";
 import { defaultState, GraphContext } from "./context";
 import { reducer } from "./reducer";
+import { IGraphContextState } from "./types";
 
 export const GraphContextProvider: FC<
   PropsWithChildren<IGraphWrapperProps>
@@ -68,7 +72,7 @@ export const GraphContextProvider: FC<
   );
 
   // Mutable refs to store messages and transactions without causing re-renders
-  const transactionsByIdRef = useRef<Map<number, ITransactionMessage[]>>(
+  const transactionsByIdRef = useRef<Map<number, IEventData[]>>(
     new Map(),
   );
   const txGeneratedMessagesById = useRef<
@@ -80,8 +84,17 @@ export const GraphContextProvider: FC<
   const txReceivedMessagesById = useRef<
     Map<number, IServerMessage<ITransactionReceived>[]>
   >(new Map());
+  const ibGeneratedMessagesById = useRef<
+    Map<string, IServerMessage<IInputBlockGenerated>>
+  >(new Map());
+  const ibSentMessagesById = useRef<
+    Map<number, IServerMessage<IInputBlockSent>[]>
+  >(new Map());
+  const ibReceivedMessagesById = useRef<
+    Map<number, IServerMessage<IInputBlockReceived>[]>
+  >(new Map());
 
-  const resolvedState = useMemo(
+  const resolvedState: IGraphContextState = useMemo(
     () => ({
       ...state,
       canvasRef,
@@ -89,6 +102,9 @@ export const GraphContextProvider: FC<
       txGeneratedMessagesById,
       txSentMessagesById,
       txReceivedMessagesById,
+      ibGeneratedMessagesById,
+      ibSentMessagesById,
+      ibReceivedMessagesById,
       intervalId,
       simulationPauseTime,
       simulationStartTime,

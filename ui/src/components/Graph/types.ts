@@ -14,18 +14,18 @@ export interface IServerNodeMap {
 
 export enum EServerType {
   NODE = "node",
-  LINK = "link"
+  LINK = "link",
 }
 
 export type TServerNode = {
   type: EServerType.NODE;
   data: INode;
-}
+};
 
 export type TServerLink = {
-  type: EServerType.LINK,
+  type: EServerType.LINK;
   data: ILink;
-}
+};
 
 export type TServerNodeMap = TServerNode | TServerLink;
 
@@ -37,7 +37,7 @@ export interface ITransformedNode {
     location: number[];
     stake?: number;
   };
-};
+}
 
 /** source|target */
 export type TLinkMapId = string;
@@ -51,6 +51,7 @@ export enum EMessageType {
   TransactionGenerated = "TransactionGenerated",
   TransactionReceived = "TransactionReceived",
   TransactionSent = "TransactionSent",
+  InputBlockSent = "InputBlockSent",
   InputBlockReceived = "InputBlockReceived",
   PraosBlockReceived = "PraosBlockReceived",
   Slot = "Slot",
@@ -74,6 +75,15 @@ export interface ITransactionReceived {
 export interface ITransactionSent {
   type: EMessageType.TransactionSent;
   id: number;
+  sender: number;
+  recipient: number;
+}
+
+export interface IInputBlockSent {
+  type: EMessageType.InputBlockSent;
+  slot: number;
+  producer: number;
+  index: number;
   sender: number;
   recipient: number;
 }
@@ -112,6 +122,7 @@ export interface IInputBlockGenerated {
 export type TMessageType =
   | IInputBlockGenerated
   | IInputBlockReceived
+  | IInputBlockSent
   | IPraosBlockReceived
   | ISlot
   | ITransactionGenerated
@@ -123,20 +134,11 @@ export interface IServerMessage<T = TMessageType> {
   message: T;
 }
 
-export interface ITransactionMessage {
+export interface IEventData {
   id: number;
   generated: number;
   duration: number;
   sentTime: number;
   source: number;
   target: number;
-}
-
-export interface ITransactionRoundTrip {
-  generated: number;
-  trip: {
-    source: number;
-    target: number;
-    duration: number;
-  }[];
 }
