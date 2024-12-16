@@ -3,12 +3,29 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useGraphContext } from "@/contexts/GraphContext/context";
 import { ISimulationAggregatedDataState } from "@/contexts/GraphContext/types";
 
-export const useStreamMessagesHandler = () => {
-  const {
-    dispatch
-  } = useGraphContext();
+export const useStreamMessagesHandler = (
+  callback: (json: ISimulationAggregatedDataState) => void,
+) => {
+  const { dispatch } = useGraphContext();
   const eventSource = useRef<EventSource>();
   const [streaming, setStreaming] = useState(false);
+
+  // const currentTimestamp = 0, currentTimeScale = 0.5;
+  // onAnimationFrame(() => {
+  //   let elapsed = now() - currentTimestamp;
+  //   let advance = elapsed * currentTimeScale;
+  //   let newTimestamp = currentTimestamp + advance;
+  //   let events = requestEvents(currentTimestamp, newTimestamp, filter);
+  //   for(event in events) {
+  //     for(stat in stats) {
+  //       stat.update(event);
+  //     }
+  //     for(viz in visualizations) {
+  //       viz.enqueue(event);
+  //     }
+  //   }
+  //   requestAnimationFrame();
+  // })
 
   const startStream = useCallback(() => {
     setStreaming(true);
@@ -19,19 +36,30 @@ export const useStreamMessagesHandler = () => {
       stopStream();
     };
 
+    let timestamp = Date.now();
+    let msgCount = 0;
     eventSource.current.onmessage = function (message) {
-      const json: ISimulationAggregatedDataState = JSON.parse(
-        message.data,
-        (key: string, v: any) => {
-          if (key === "nodes") {
-            return new Map(v);
-          }
+      msgCount += 1;
+      if (msgCount % 10000 == 0) {
+        let now = Date.now();
+        console.log(`10k messages took ${now - timestamp}ms`);
+        timestamp = now;
+      }
 
-          return v;
-        },
-      );
+      const json: ISimulationAggregatedDataState = JSON.parse(message.data);
+      callback(json);
+      // const json: ISimulationAggregatedDataState = JSON.parse(
+      //   message.data,
+      //   (key: string, v: any) => {
+      //     if (key === "nodes") {
+      //       return new Map(v);
+      //     }
 
-      dispatch({ type: "SET_AGGREGATED_DATA", payload: json });
+      //     return v;
+      //   },
+      // );
+
+      // dispatch({ type: "SET_AGGREGATED_DATA", payload: json });
     };
   }, []);
 
