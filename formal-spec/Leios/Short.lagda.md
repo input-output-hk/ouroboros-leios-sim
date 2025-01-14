@@ -10,18 +10,22 @@ open import Leios.FFD
 open import Leios.SpecStructure
 open import Data.Fin.Patterns
 ```
-Uniform Short Pipeline:
+The Uniform Short Pipeline consists of five stages:
 
 1. If elected, propose IB
 2. Wait
 3. Wait
-4. If elected, propose EB
+4. If elected, propose EB (endorse)
 5. If elected, vote
-   If elected, propose RB
+
+And for the base layer:
+
+6. If elected, propose RB
 ```agda
 module Leios.Short (⋯ : SpecStructure 1)
   (let open SpecStructure ⋯ renaming (isVoteCertified to isVoteCertified')) where
 ```
+Keep track of executed roles
 ```agda
 data SlotUpkeep : Type where
   Base IB-Role EB-Role V-Role : SlotUpkeep
@@ -54,10 +58,13 @@ module Protocol where
                    SD     : StakeDistr
                    pks    : List PubKey
 ```
+### Protocol Rules
 ```agda
   data _↝_ : LeiosState → LeiosState → Type where
 ```
 #### Block/Vote production rules
+InputBlocks are created uniformly in the `Propose` state of the pipeline.
+InputBlock headers and bodies are broadcast through freshest first diffusion.
 ```agda
     IB-Role : let open LeiosState s renaming (FFDState to ffds)
                   b = ibBody (record { txs = ToPropose })
@@ -69,6 +76,10 @@ module Protocol where
             ─────────────────────────────────────────────────────────────────────────
             s ↝ addUpkeep record s { FFDState = ffds' } IB-Role
 ```
+EndorserBlocks are generated in the `Endorse` stage. An EB collects all IBs seen by the
+end of the second `Wait` stage, i.e. all IBs currently available from the corresponding
+`Propose` stage are included.
+EndorserBlocks (header only) are broadcast through freshest first diffusion.
 ```agda
     EB-Role : let open LeiosState s renaming (FFDState to ffds)
                   LI = map getIBRef $ filter (_∈ᴮ slice L slot 3) IBs
@@ -80,6 +91,8 @@ module Protocol where
             ─────────────────────────────────────────────────────────────────────────
             s ↝ addUpkeep record s { FFDState = ffds' } EB-Role
 ```
+In the `Vote` stage, all EBs of the corresponding `Endorse` stage are upvoted.
+Votes (header only) are broadcast through freshest first diffusion.
 ```agda
     V-Role  : let open LeiosState s renaming (FFDState to ffds)
                   EBs' = filter (allIBRefsKnown s) $ filter (_∈ᴮ slice L slot 1) EBs
@@ -114,6 +127,9 @@ module Protocol where
                s ↝ addUpkeep s V-Role
 ```
 ### Uniform short-pipeline
+The Leios protocol is modelled as a relation that describes how the LeiosState can
+evolve. In addition to the LeiosState, the relation also allows to specify input and
+output.
 ```agda
   data _-⟦_/_⟧⇀_ : Maybe LeiosState → LeiosInput → LeiosOutput → LeiosState → Type where
 ```
@@ -177,3 +193,4 @@ Note: Submitted data to the base chain is only taken into account
           ─────────────────────────────
           just s -⟦ SLOT / EMPTY ⟧⇀ s'
 ```
+
